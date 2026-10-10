@@ -1,0 +1,108 @@
+# 打 tag(如 v2.22.0)时,在云端 Windows 环境自动构建并发布 Release。
+#
+# 只看源码就能复现:本工作流公开可见,任何人可据此验证 Release 中的 exe
+# 确实由本仓库对应提交、经下列命令编译而来(不含任何客户端提取内容)。
+name: 构建并发布
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 创建 Release 需要写权限
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 构建单文件工具并创建 Release
+    runs-on: windows-latest
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: 构建(静态单文件 exe)
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = '0'
+          go vet ./...
+          go build -trimpath -ldflags "-s -w" -o antigravity-chinese.exe .
+          if (-not (Test-Path antigravity-chinese.exe)) { throw '构建失败:未生成 exe' }
+          .\antigravity-chinese.exe --help
+          Add-Content -Path $env:GITHUB_ENV -Value "GO_VERSION=$(go env GOVERSION)" -Encoding utf8
+
+      - name: 打包(exe + 词典 + README)
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $dir = "dist/antigravity-chinese-$tag"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Copy-Item antigravity-chinese.exe $dir/
+          Copy-Item translations_settings.json $dir/
+          Copy-Item README.md $dir/
+          $zip = "antigravity-chinese-$tag.zip"
+          Compress-Archive -Path $dir -DestinationPath $zip -Force
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          Add-Content -Path $env:GITHUB_ENV -Value "ZIP_NAME=$zip" -Encoding utf8
+          Add-Content -Path $env:GITHUB_ENV -Value "ZIP_SHA256=$hash" -Encoding utf8
+
+      - name: 生成中文 Release 说明
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $sha = '${{ github.sha }}'.Substring(0, 7)
+          $repo = '${{ github.repository }}'
+          $template = @'
+          ## Antigravity 汉化工具 {0}
+
+          > 非官方项目,与 Google 无任何关联。仅用于个人本地界面汉化,支持一键还原。
+
+          ### 使用方法
+
+          1. 完全退出 Antigravity 客户端(含托盘图标);
+          2. 解压本压缩包到任意目录;
+          3. 双击 `antigravity-chinese.exe`,在菜单中选择「1. 应用中文补丁」;
+          4. 重新打开 Antigravity,按 `Ctrl + ,` 查看中文界面。
+
+          还原:双击 exe → 选「2. 还原官方英文」,或执行 `antigravity-chinese.exe --restore`。
+
+          ### 本次构建
+
+          - 触发标签:{0}
+          - 源码提交:[{1}](https://github.com/{2}/commit/{1})
+          - 构建环境:windows-latest + {3}
+          - 压缩包 SHA256:`{4}`
+
+          ### 文件清单
+
+          - `antigravity-chinese.exe` — 单文件工具,零依赖(无需 Python 或任何运行时)
+          - `translations_settings.json` — 翻译词典,可自行修改
+          - `README.md` — 完整说明
+
+          ### 注意事项
+
+          - 首次运行如遇 Windows SmartScreen 提示,点「更多信息」→「仍要运行」即可(未签名程序的常规提示);
+          - 工具只翻译界面文案,不触碰账号、配额、认证与任何业务逻辑;修改客户端本地资源可能违反其服务条款,请自行评估风险。
+          '@
+          $notes = $template -f $tag, $sha, $repo, $env:GO_VERSION, $env:ZIP_SHA256
+          [IO.File]::WriteAllText("$PWD/release_notes.md", $notes, [Text.UTF8Encoding]::new($false))
+
+      - name: 创建 Release(中文说明)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $zip = $env:ZIP_NAME
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host '该标签已有 Release,改为覆盖上传资产。'
+            gh release upload $tag $zip --clobber
+          } else {
+            gh release create $tag $zip --title "$tag 汉化工具(单文件,双击即用)" --notes-file release_notes.md
+          }

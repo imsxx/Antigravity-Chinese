@@ -177,7 +177,10 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 - 覆盖范围:**设置界面(Ctrl+,)全部页面** + **侧边栏导航/面板(新建对话、对话历史、自动化/计划任务、UI 插件、自定义、设置、提供反馈)** + **命令面板 / 右键菜单 / 对话区按钮** + **通知与对话框标题、反馈问卷选项、See all/See more 展开器、环境与区域选择等杂项**;
 - 扫描候选已覆盖 `label/title/description/displayName/sectionTitle/shortDescription/text/tooltipText/sidebarLabel/searchPlaceholder/tooltip` 十二类属性(新类带词边界防误报);
 - 有意保留英文:模型名等来自服务端下发的动态文案、调试/内部面板(轨迹检查器)、LaTeX 渲染选项、内部代号(Hub / CitC / Cog / Google3)、`emptyMessageSingular/Plural`(复数化词形,与外部模板拼接);
-- 后续(可选):官方新版发布后跑 `--scan`,按报告增量适配即可;打 tag 自动出包可交给 GitHub Actions。
+- **发布流程**:打 tag 即云端自动构建发布(`.github/workflows/release.yml`)——
+  `git tag v2.22.0 && git push origin v2.22.0`,GitHub Actions 会编译 exe、打包(exe + 词典 + README)
+  并生成中文 Release 说明(含源码提交链接与压缩包 SHA256);重复推送同一 tag 时自动改为覆盖上传资产;
+- 后续(可选):官方新版发布后跑 `--scan`,按报告增量适配即可。
 
 ---
 

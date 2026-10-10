@@ -16,3 +16,4 @@ __pycache__/
 _tools/
 antigravity-chinese.exe
 *.exe
+dist/
