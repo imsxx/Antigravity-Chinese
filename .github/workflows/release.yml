@@ -1,7 +1,9 @@
-# 打 tag(如 v2.22.0)时,在云端 Windows 环境自动构建并发布 Release。
+# 打 tag(如 v2.0.0)时,在云端 Windows 环境自动构建并发布 Release。
 #
 # 只看源码就能复现:本工作流公开可见,任何人可据此验证 Release 中的 exe
 # 确实由本仓库对应提交、经下列命令编译而来(不含任何客户端提取内容)。
+#
+# Release 说明 = CHANGELOG.md 中对应版本的段落(人话版更新内容)+ 固定信息块。
 name: 构建并发布
 
 on:
@@ -57,10 +59,30 @@ jobs:
           $tag = '${{ github.ref_name }}'
           $sha = '${{ github.sha }}'.Substring(0, 7)
           $repo = '${{ github.repository }}'
-          $template = @'
-          ## Antigravity 汉化工具 {0}
 
-          > 非官方项目,与 Google 无任何关联。仅用于个人本地界面汉化,支持一键还原。
+          # 从 CHANGELOG.md 提取本版本段落(人话版更新内容)
+          $section = @()
+          $in = $false
+          $lines = @(Get-Content CHANGELOG.md -Encoding UTF8 -ErrorAction SilentlyContinue)
+          foreach ($line in $lines) {
+            if (-not $in) {
+              if ($line -match "^##\s+$([regex]::Escape($tag))(\s|\(|$)") { $in = $true }
+              continue
+            }
+            if ($line -match "^##\s") { break }
+            $section += $line
+          }
+          $highlights = ($section -join "`n").Trim()
+          if (-not $highlights) {
+            $highlights = '本次发布未在 CHANGELOG.md 中找到对应版本的说明,更新内容详见仓库提交记录。'
+          }
+
+          $template = @'
+          ## Antigravity 汉化工具 {{TAG}}
+
+          {{HIGHLIGHTS}}
+
+          ---
 
           ### 使用方法
 
@@ -73,10 +95,10 @@ jobs:
 
           ### 本次构建
 
-          - 触发标签:{0}
-          - 源码提交:[{1}](https://github.com/{2}/commit/{1})
-          - 构建环境:windows-latest + {3}
-          - 压缩包 SHA256:`{4}`
+          - 触发标签:{{TAG}}
+          - 源码提交:[{{SHA}}](https://github.com/{{REPO}}/commit/{{SHA}})
+          - 构建环境:windows-latest + {{GOVER}}
+          - 压缩包 SHA256:`{{HASH}}`
 
           ### 文件清单
 
@@ -89,7 +111,12 @@ jobs:
           - 首次运行如遇 Windows SmartScreen 提示,点「更多信息」→「仍要运行」即可(未签名程序的常规提示);
           - 工具只翻译界面文案,不触碰账号、配额、认证与任何业务逻辑;修改客户端本地资源可能违反其服务条款,请自行评估风险。
           '@
-          $notes = $template -f $tag, $sha, $repo, $env:GO_VERSION, $env:ZIP_SHA256
+          $notes = $template.Replace('{{TAG}}', $tag)
+          $notes = $notes.Replace('{{HIGHLIGHTS}}', $highlights)
+          $notes = $notes.Replace('{{SHA}}', $sha)
+          $notes = $notes.Replace('{{REPO}}', $repo)
+          $notes = $notes.Replace('{{GOVER}}', $env:GO_VERSION)
+          $notes = $notes.Replace('{{HASH}}', $env:ZIP_SHA256)
           [IO.File]::WriteAllText("$PWD/release_notes.md", $notes, [Text.UTF8Encoding]::new($false))
 
       - name: 创建 Release(中文说明)
