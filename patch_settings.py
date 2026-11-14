@@ -195,7 +195,8 @@ def pack_asar(header, files_data, out_asar_path):
 
 KEY_CATEGORIES = ('label', 'title', 'description', 'displayName', 'sectionTitle',
                   'shortDescription', 'longDescription', 'subtitle',
-                  'text', 'tooltipText', 'sidebarLabel', 'searchPlaceholder', 'tooltip')
+                  'text', 'tooltipText', 'sidebarLabel', 'searchPlaceholder', 'tooltip',
+                  'placeholder')
 
 
 def load_rules(script_dir):
@@ -398,9 +399,10 @@ def do_scan(app_dir, rules):
     w('')
     w('=== 设置项注册表(screen / 标识 / label / description) ===')
     seen = set()
-    for m in re.finditer(r'\[([A-Za-z]{1,3}\.[A-Z0-9_]+),\{', main_js):
-        ident = m.group(1)
-        seg = main_js[m.start():m.start() + 1200]
+    for m in re.finditer(r'\[(?:"([A-Za-z0-9_.]+)",\{isProviderSetting:|([A-Za-z]{1,3}\.[A-Z0-9_]+),\{)', main_js):
+        ident = m.group(1) or m.group(2)
+        seg_end = main_js.find('],["', m.start() + 1)
+        seg = main_js[m.start():seg_end if seg_end >= 0 else m.start() + 1200]
         lm = re.search(r'label:"((?:[^"\\]|\\.)*)"', seg)
         dm = re.search(r"description:(?:'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\"|`([^`]*)`)", seg)
         sm = re.search(r'screen:"([^"]+)"', seg)
@@ -428,7 +430,7 @@ def do_scan(app_dir, rules):
     mine = [(k, r'%s:"((?:[^"\\]|\\.)*)"' % k) for k in
             ('label', 'title', 'description', 'displayName', 'sectionTitle', 'shortDescription')]
     mine += [(k, r'(?<![A-Za-z0-9_$])%s:"((?:[^"\\]|\\.)*)"' % k) for k in
-             ('text', 'tooltipText', 'sidebarLabel', 'searchPlaceholder', 'tooltip')]
+             ('text', 'tooltipText', 'sidebarLabel', 'searchPlaceholder', 'tooltip', 'placeholder')]
     for key, pat in mine:
         counts = {}
         for m in re.finditer(pat, main_js):

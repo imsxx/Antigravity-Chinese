@@ -12,7 +12,8 @@ import (
 )
 
 var (
-	setupEntryRe = regexp.MustCompile(`\[([A-Za-z]{1,3}\.[A-Z0-9_]+),\{`)
+	// 兼容两种设置注册表形式:旧版 [Qi.XXX,{...}] 与新版 ["settingKey",{isProviderSetting:...}]。
+	setupEntryRe = regexp.MustCompile(`\[(?:"([A-Za-z0-9_.]+)",\{isProviderSetting:|([A-Za-z]{1,3}\.[A-Z0-9_]+),\{)`)
 	labelRe      = regexp.MustCompile(`label:"((?:[^"\\]|\\.)*)"`)
 	descRe       = regexp.MustCompile("description:(?:'((?:[^'\\\\]|\\\\.)*)'|\"((?:[^\"\\\\]|\\\\.)*)\"|`([^`]*)`)")
 	screenRe     = regexp.MustCompile(`screen:"([^"]+)"`)
@@ -48,7 +49,7 @@ func mineSpecs() []mineSpec {
 	for _, k := range []string{"label", "title", "description", "displayName", "sectionTitle", "shortDescription"} {
 		specs = append(specs, mineSpec{key: k, re: regexp.MustCompile(k + pat)})
 	}
-	for _, k := range []string{"text", "tooltipText", "sidebarLabel", "searchPlaceholder", "tooltip"} {
+	for _, k := range []string{"text", "tooltipText", "sidebarLabel", "searchPlaceholder", "tooltip", "placeholder"} {
 		specs = append(specs, mineSpec{key: k, re: regexp.MustCompile(k + pat), guard: true})
 	}
 	return specs
@@ -91,8 +92,17 @@ func doScan(appDir, exeDir string, rules []*Rule) error {
 	w("=== 设置项注册表(screen / 标识 / label / description) ===")
 	seen := map[string]bool{}
 	for _, m := range setupEntryRe.FindAllStringSubmatchIndex(mainJS, -1) {
-		ident := mainJS[m[2]:m[3]]
+		ident := ""
+		for gi := 2; gi+1 < len(m); gi += 2 {
+			if m[gi] >= 0 {
+				ident = mainJS[m[gi]:m[gi+1]]
+				break
+			}
+		}
 		end := m[0] + 1200
+		if rel := strings.Index(mainJS[m[0]+1:], `],["`); rel >= 0 && m[0]+1+rel < end {
+			end = m[0] + 1 + rel
+		}
 		if end > len(mainJS) {
 			end = len(mainJS)
 		}

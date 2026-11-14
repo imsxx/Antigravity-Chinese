@@ -34,7 +34,7 @@ var keyCategories = map[string]bool{
 	"label": true, "title": true, "description": true, "displayName": true,
 	"sectionTitle": true, "shortDescription": true, "longDescription": true,
 	"subtitle": true, "text": true, "tooltipText": true, "sidebarLabel": true,
-	"searchPlaceholder": true, "tooltip": true,
+	"searchPlaceholder": true, "tooltip": true, "placeholder": true,
 }
 
 // convertReplacement 把 \1 形式转为 Go 的 ${1},并把字面 $ 转义为 $$。

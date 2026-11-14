@@ -121,7 +121,7 @@ Copy-Item "$env:LOCALAPPDATA\Programs\antigravity\resources\bin\language_server.
 校验标准(缺一不可):
 
 - **打补丁后**:`app.asar` 与 Python 参考实现产物 **逐字节一致**;`web_bundle.zip` 除压缩
-  字节流外,304 个条目内容与 Python 版零差异;
+  字节流外,548 个条目内容与 Python 版零差异;
 - **还原后**:`app.asar` 与官方备份 **逐字节一致**(`_work/fake_validate.py` 可直接复用);
 - `--verify` 的 sha256 与 `python -u _work/hash_py.py` 输出的基准 sha256 一致;
 - `--scan` 报告与 Python 版报告 **逐行相同**(`_work/cmp_scan.py` 可直接复用)。
@@ -137,15 +137,18 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 
 ---
 
-## 6. 关键锚点(基于 v2.22.0 实测,升级后需复核)
+## 6. 关键锚点(基于 v2.32.1 实测,升级后需复核)
 
 - 注入锚点(`dist/languageServer.js`):`'--enable_sidecars',\n        ];`
 - 注入标记:`_customBundle`(还原时逆向移除,结果与官方逐字节一致)
 - 注入依赖:`fs`、`path_1` 均为模块顶层常量(TS 编译产物,已验证作用域安全)
 - 界面资源:从 `bin/language_server.exe` 内嵌 zip 提取(定位 `PK\x05\x06` 并校验含 `main.js` + `index.html`)
-- 设置导航数组:`r7a=[{screen:"General"},...]` 与 `A7a` 映射(导航标签翻译在此注入)
-- 设置注册表:`[Qi.XXX,{screen:"General",label:"...",description:"...",settingType:"..."}]`
-- 主题卡片:`PRb=[{id:1,displayName:"System",...}]`
+- 设置导航数组:`var fEb=[{screen:"General"},...]` 与 `mEb=new Map([...fEb.map(...),["Provide Feedback","Give Feedback"]])`(导航标签翻译在此注入)
+- 设置注册表:`["settingKey",{isProviderSetting:!0,screen:"General",label:"...",description:"..."}]`
+  (旧版 `[Qi.XXX,{...}]` 形式仍需兼容扫描)
+- 主题卡片按 `displayName:"System"/"Light"/"Dark"` 渲染;翻译显示名时必须同步代码内的比较值
+- 部分属性值同时参与查找/分支判断(如 `sectionTitle`、导航 `title`、`displayName`),翻译前先搜索
+  `=== "值"` / `!== "值"`,并将对应比较字面量一并改为中文
 - 官方 `--web_bundle_path` 参数:外挂界面资源包的官方机制(注入代码即调用它)
 
 ---
@@ -170,15 +173,15 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 
 ## 9. 当前状态
 
-- 引擎:**Go 1.21+(仅标准库)**,`antigravity-chinese.exe` 约 2.9MB;Python 版保留为验证基准与回退;
-- 已验证版本:**2.22.0**;(2026-10)规则 **1094 条全命中**、1467 处替换;
-- 性能:全流程约 **2.1 秒**(读取 158MB exe + 提取 + 应用 + 打包 + 注入 + 回读校验);
-- 验收记录:`--verify` sha256 `4d953bf3…c67b` 与 Python 一致;模拟目录 asar 逐字节一致;zip 304 条目零差异;`--scan` 报告 323 行零差异;
-- 覆盖范围:**设置界面(Ctrl+,)全部页面** + **侧边栏导航/面板(新建对话、对话历史、自动化/计划任务、UI 插件、自定义、设置、提供反馈)** + **命令面板 / 右键菜单 / 对话区按钮** + **通知与对话框标题、反馈问卷选项、See all/See more 展开器、环境与区域选择等杂项**;
-- 扫描候选已覆盖 `label/title/description/displayName/sectionTitle/shortDescription/text/tooltipText/sidebarLabel/searchPlaceholder/tooltip` 十二类属性(新类带词边界防误报);
-- 有意保留英文:模型名等来自服务端下发的动态文案、调试/内部面板(轨迹检查器)、LaTeX 渲染选项、内部代号(Hub / CitC / Cog / Google3)、`emptyMessageSingular/Plural`(复数化词形,与外部模板拼接);
+- 引擎:**Go 1.21+(仅标准库)**,`antigravity-chinese.exe` 约 3.0MB;Python 版保留为验证基准与回退;
+- 已验证版本:**2.32.1**;(2026-11)规则 **1504 条全命中**、2042 处替换;
+- 性能:全流程约 **4.4 秒**(读取 206MB exe + 提取 + 应用 + 打包 + 注入 + 回读校验);
+- 验收记录:`--verify` sha256 `a8798316…b6ee2` 与 Python 一致;模拟目录 asar 逐字节一致;zip 548 条目零差异;`--scan` 报告 210 行零差异;
+- 覆盖范围:**设置界面(Ctrl+,)全部页面** + **主侧栏/项目分组、对话操作按钮与悬停提示** + **欢迎语、输入框占位符、语音模式、模型选择器无障碍标签** + **命令面板 / 右键菜单 / 对话区按钮** + **通知与对话框标题、反馈问卷选项、See all/See more 展开器、环境与区域选择等杂项**;
+- 扫描候选已覆盖 `label/title/description/displayName/sectionTitle/shortDescription/text/tooltipText/sidebarLabel/searchPlaceholder/tooltip/placeholder` 十三类属性(新类带词边界防误报);
+- 有意保留英文:服务端下发的动态选项(`Knowledge Work` / `Software Engineering`)、模型名与档位、项目名/对话标题等用户数据、调试/内部面板(轨迹检查器)、LaTeX 渲染选项、内部代号(Hub / CitC / Cog / Google3)、`emptyMessageSingular/Plural`(复数化词形,与外部模板拼接);
 - **发布流程**:打 tag 即云端自动构建发布(`.github/workflows/release.yml`)——
-  `git tag v2.22.0 && git push origin v2.22.0`,GitHub Actions 会编译 exe、打包(exe + 词典 + README)
+  `git tag v2.32.1 && git push origin v2.32.1`,GitHub Actions 会编译 exe、打包(exe + 词典 + README)
   并生成中文 Release 说明(含源码提交链接与压缩包 SHA256);重复推送同一 tag 时自动改为覆盖上传资产;
 - 后续(可选):官方新版发布后跑 `--scan`,按报告增量适配即可。
 
