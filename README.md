@@ -23,6 +23,9 @@
 - `antigravity-cn.exe` — **推荐入口**,终端启动器;
 - `设置与维护.exe` — 控制台维护工具,用于还原、扫描、验证和修复。
 
+压缩包内维护工具的文件名是 `设置与维护.exe`。GitHub Release 的独立资产名不支持中文,
+因此单独下载时显示为 `Antigravity-CN-Settings.exe`,与压缩包内文件完全相同。
+
 双击 `antigravity-cn.exe` 后会打开一个终端窗口,并自动:
 
 1. 检查本项目的稳定版 Release;
@@ -172,7 +175,7 @@ go build -trimpath -tags launcher -ldflags "-s -w -X main.toolVersion=v2.33.1" -
 
 - `go vet ./...`、`go vet -tags launcher ./...`、`go test ./...`;
 - 生成 `设置与维护.exe`、`antigravity-cn.exe`、压缩包和 `checksums.txt`;
-- 上传压缩包、两个 exe 与校验文件;
+- 上传压缩包、启动器、ASCII 别名 `Antigravity-CN-Settings.exe` 与校验文件;
 - Release 说明自动引用 `CHANGELOG.md` 对应版本。
 
 ---

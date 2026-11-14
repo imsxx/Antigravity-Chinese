@@ -222,7 +222,9 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 - **发布流程**:打 tag 即云端自动构建发布(`.github/workflows/release.yml`)——
   `git tag v2.33.1 && git push origin v2.33.1`,GitHub Actions 会编译两个 exe、生成
   `checksums.txt`、打包(启动器 + 控制台工具 + 词典 + README)并生成中文 Release 说明;
-  Release 资产包含两个 exe 与校验文件;重复推送同一 tag 时自动改为覆盖上传资产;
+  Release 资产名必须使用 ASCII:独立维护工具上传为 `Antigravity-CN-Settings.exe`,
+  压缩包内仍保留 `设置与维护.exe`。不要把中文文件名传给 `gh release upload`
+  (GitHub 会落成 `default.exe`);重复推送同一 tag 时自动清理旧错误资产并覆盖上传;
 - 后续(可选):官方新版发布后跑 `--scan`,按报告增量适配即可。
 
 ---

@@ -2,7 +2,7 @@
 #
 # 发布资产:
 #   - antigravity-chinese-vX.Y.Z.zip(控制台工具 + 终端启动器 + 词典 + README)
-#   - 设置与维护.exe / antigravity-cn.exe(独立下载)
+#   - Antigravity-CN-Settings.exe / antigravity-cn.exe(独立下载,资产名使用 ASCII)
 #   - checksums.txt(SHA256,供启动器自更新校验)
 #
 # Release 说明 = CHANGELOG.md 中对应版本的段落 + 固定信息块。
@@ -58,18 +58,21 @@ jobs:
         run: |
           $tag = '${{ github.ref_name }}'
           $maintenance = '设置与维护.exe'
+          $maintenanceAsset = 'Antigravity-CN-Settings.exe'
           $dir = "dist/antigravity-chinese-$tag"
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           Copy-Item $maintenance $dir/
           Copy-Item antigravity-cn.exe $dir/
           Copy-Item translations_settings.json $dir/
           Copy-Item README.md $dir/
+          # GitHub Release 资产名不支持中文;单独下载使用 ASCII 别名,压缩包内仍保留中文名。
+          Copy-Item -LiteralPath $maintenance -Destination $maintenanceAsset -Force
           $zip = "antigravity-chinese-$tag.zip"
           Compress-Archive -Path $dir -DestinationPath $zip -Force
 
           # 仅校验独立资产;词典与 README 在 zip 内,由 zip 的 SHA256 覆盖。
           $assetNames = @(
-            $maintenance,
+            $maintenanceAsset,
             'antigravity-cn.exe',
             $zip
           )
@@ -86,6 +89,7 @@ jobs:
           $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower()
           Add-Content -Path $env:GITHUB_ENV -Value "ZIP_NAME=$zip" -Encoding utf8
           Add-Content -Path $env:GITHUB_ENV -Value "ZIP_SHA256=$zipHash" -Encoding utf8
+          Add-Content -Path $env:GITHUB_ENV -Value "MAINTENANCE_ASSET=$maintenanceAsset" -Encoding utf8
 
       - name: 生成中文 Release 说明
         shell: pwsh
@@ -149,10 +153,9 @@ jobs:
 
           ### 文件清单
 
-          - `antigravity-cn.exe` — 推荐入口:终端启动器,保留完整检查日志并自动检查更新与补丁
-          - `设置与维护.exe` — 控制台维护工具:应用 / 还原 / 扫描 / 验证
-          - `translations_settings.json` — 翻译词典,可自行修改
-          - `README.md` — 完整说明
+          - `antigravity-chinese-{{TAG}}.zip` — 推荐下载,内含启动器、`设置与维护.exe`、词典和 README
+          - `antigravity-cn.exe` — 终端启动器:保留完整检查日志并自动检查更新与补丁
+          - `Antigravity-CN-Settings.exe` — 独立下载版维护工具(与压缩包内 `设置与维护.exe` 相同;GitHub 独立资产名不支持中文)
           - `checksums.txt` — 发布资产 SHA256(启动器自更新校验使用)
 
           ### 注意事项
@@ -176,12 +179,21 @@ jobs:
         run: |
           $tag = '${{ github.ref_name }}'
           $zip = $env:ZIP_NAME
-          $maintenance = '设置与维护.exe'
+          $maintenanceAsset = $env:MAINTENANCE_ASSET
           gh release view $tag 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             Write-Host '该标签已有 Release,更新说明并覆盖上传资产。'
             gh release edit $tag --title "$tag Antigravity CN 启动器" --notes-file release_notes.md
-            gh release upload $tag $zip $maintenance antigravity-cn.exe checksums.txt --clobber
+            $repo = '${{ github.repository }}'
+            $release = gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+            $assets = gh api "repos/$repo/releases/$($release.id)/assets" | ConvertFrom-Json
+            foreach ($asset in @($assets)) {
+              if ($asset.name -in @('default.exe', 'maintenance-test.exe')) {
+                Write-Host "删除旧版错误命名的资产: $($asset.name)"
+                gh api --method DELETE "repos/$repo/releases/assets/$($asset.id)" | Out-Null
+              }
+            }
+            gh release upload $tag $zip $maintenanceAsset antigravity-cn.exe checksums.txt --clobber
           } else {
-            gh release create $tag $zip $maintenance antigravity-cn.exe checksums.txt --title "$tag Antigravity CN 启动器" --notes-file release_notes.md
+            gh release create $tag $zip $maintenanceAsset antigravity-cn.exe checksums.txt --title "$tag Antigravity CN 启动器" --notes-file release_notes.md
           }
