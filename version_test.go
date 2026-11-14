@@ -32,14 +32,14 @@ func TestCompareToolVersions(t *testing.T) {
 
 func TestParseChecksums(t *testing.T) {
 	data := []byte("\ufeff" +
-		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  antigravity-chinese.exe\n" +
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  设置与维护.exe\n" +
 		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *antigravity-cn.exe\n" +
 		"SHA256 (translations_settings.json) = cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n")
 	sums, err := parseChecksums(data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"antigravity-chinese.exe", "antigravity-cn.exe", "translations_settings.json"} {
+	for _, name := range []string{"设置与维护.exe", "antigravity-cn.exe", "translations_settings.json"} {
 		if _, err := checksumForAsset(sums, name); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}

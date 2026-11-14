@@ -346,7 +346,7 @@ func reportStats(rules []*Rule, hit map[*Rule]int) (ok, total, repl int) {
 			fmt.Println("")
 			fmt.Println(strings.Repeat("*", 60))
 			fmt.Printf("警告:规则命中率偏低(%.0f%%),客户端可能已更新。\n", rate*100)
-			fmt.Println("建议运行: antigravity-chinese.exe --scan 检查新增/变更文案。")
+			fmt.Printf("建议运行: %s --scan 检查新增/变更文案。\n", maintenanceExeName)
 			fmt.Println(strings.Repeat("*", 60))
 		}
 	}

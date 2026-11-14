@@ -392,7 +392,7 @@ func applyPatchWithProgress(appDir, exeDir string, rules []*Rule, progress apply
 
 	// 注入锚点必须在生成任何新资源之前确认。
 	if !alreadyPatched && !strings.Contains(lsCode, insertAfter) {
-		fmt.Println("建议运行: antigravity-chinese.exe --scan 检查。")
+		fmt.Printf("建议运行: %s --scan 检查。\n", maintenanceExeName)
 		return fail("未在 app.asar 中找到注入锚点,客户端结构可能已变化")
 	}
 

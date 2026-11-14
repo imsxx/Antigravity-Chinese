@@ -16,7 +16,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 )
 
 const (
@@ -475,9 +474,9 @@ func extractToolUpdate(zipPath, destDir string) (stagedToolUpdate, error) {
 	defer zr.Close()
 
 	wanted := map[string]string{
-		"antigravity-chinese.exe":    "antigravity-chinese.exe",
-		"antigravity-cn.exe":         "antigravity-cn.exe",
-		"translations_settings.json": "translations_settings.json",
+		maintenanceExeName: maintenanceExeName,
+		launcherExeName:    launcherExeName,
+		dictionaryFileName: dictionaryFileName,
 	}
 	found := make(map[string]bool)
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
@@ -510,9 +509,9 @@ func extractToolUpdate(zipPath, destDir string) (stagedToolUpdate, error) {
 			return staged, fmt.Errorf("解压更新文件失败 %s: %w", outName, copyErr)
 		}
 	}
-	staged.CLIExe = filepath.Join(destDir, "antigravity-chinese.exe")
-	staged.GUIExe = filepath.Join(destDir, "antigravity-cn.exe")
-	staged.Dictionary = filepath.Join(destDir, "translations_settings.json")
+	staged.CLIExe = filepath.Join(destDir, maintenanceExeName)
+	staged.GUIExe = filepath.Join(destDir, launcherExeName)
+	staged.Dictionary = filepath.Join(destDir, dictionaryFileName)
 	if err := validPEFile(staged.CLIExe); err != nil {
 		return staged, fmt.Errorf("更新包中的控制台程序无效: %w", err)
 	}
@@ -638,9 +637,9 @@ func beginUpdateTransaction(target string, staged stagedToolUpdate) (*updateTran
 		name   string
 		staged string
 	}{
-		{"translations_settings.json", staged.Dictionary},
-		{"antigravity-chinese.exe", staged.CLIExe},
-		{"antigravity-cn.exe", staged.GUIExe},
+		{dictionaryFileName, staged.Dictionary},
+		{maintenanceExeName, staged.CLIExe},
+		{launcherExeName, staged.GUIExe},
 	}
 	for _, f := range files {
 		targetPath := filepath.Join(absTarget, f.name)
@@ -657,7 +656,7 @@ func beginUpdateTransaction(target string, staged stagedToolUpdate) (*updateTran
 		})
 	}
 	// 兼容旧用户:词典单独保留一份 .bak,便于手动回退自定义词典。
-	dictTarget := filepath.Join(absTarget, "translations_settings.json")
+	dictTarget := filepath.Join(absTarget, dictionaryFileName)
 	if fileExists(dictTarget) {
 		if err := copyFile(dictTarget, dictTarget+".bak"); err != nil {
 			_ = os.RemoveAll(backupDir)
@@ -685,13 +684,13 @@ func (tx *updateTransaction) Apply() error {
 			return rollback(fmt.Errorf("替换 %s 失败: %w", entry.Name, err))
 		}
 	}
-	if err := validPEFile(filepath.Join(tx.Target, "antigravity-chinese.exe")); err != nil {
+	if err := validPEFile(filepath.Join(tx.Target, maintenanceExeName)); err != nil {
 		return rollback(err)
 	}
-	if err := validPEFile(filepath.Join(tx.Target, "antigravity-cn.exe")); err != nil {
+	if err := validPEFile(filepath.Join(tx.Target, launcherExeName)); err != nil {
 		return rollback(err)
 	}
-	if _, err := loadRules(filepath.Join(tx.Target, "translations_settings.json")); err != nil {
+	if _, err := loadRules(filepath.Join(tx.Target, dictionaryFileName)); err != nil {
 		return rollback(err)
 	}
 	return nil
@@ -725,15 +724,14 @@ const (
 	processSynchronize = 0x00100000
 	waitObject0        = 0
 	waitTimeout        = 0x102
+	createNewConsole   = 0x00000010
 )
 
 var (
 	updateKernel32          = syscall.NewLazyDLL("kernel32.dll")
-	updateUser32            = syscall.NewLazyDLL("user32.dll")
 	procOpenProcess         = updateKernel32.NewProc("OpenProcess")
 	procWaitForSingleObject = updateKernel32.NewProc("WaitForSingleObject")
 	procCloseHandle         = updateKernel32.NewProc("CloseHandle")
-	procUpdateMessageBoxW   = updateUser32.NewProc("MessageBoxW")
 )
 
 func applyUpdateMode(args []string) int {
@@ -771,9 +769,9 @@ func applyUpdateMode(args []string) int {
 	}
 	staged := stagedToolUpdate{
 		Dir:        source,
-		CLIExe:     filepath.Join(source, "antigravity-chinese.exe"),
-		GUIExe:     filepath.Join(source, "antigravity-cn.exe"),
-		Dictionary: filepath.Join(source, "translations_settings.json"),
+		CLIExe:     filepath.Join(source, maintenanceExeName),
+		GUIExe:     filepath.Join(source, launcherExeName),
+		Dictionary: filepath.Join(source, dictionaryFileName),
 		Version:    version,
 	}
 	tx, err := beginUpdateTransaction(target, staged)
@@ -783,14 +781,11 @@ func applyUpdateMode(args []string) int {
 	if err := tx.Apply(); err != nil {
 		return updateModeError(fmt.Sprintf("更新失败，已保留旧版本: %v", err))
 	}
-	gui := filepath.Join(target, "antigravity-cn.exe")
-	cmd := exec.Command(gui, "--updated", version)
-	cmd.Dir = target
-	if err := cmd.Start(); err != nil {
+	gui := filepath.Join(target, launcherExeName)
+	cmd, err := startLauncherInNewConsole(gui, "--updated", version)
+	if err != nil {
 		_ = tx.Rollback()
-		old := exec.Command(gui)
-		old.Dir = target
-		_ = old.Start()
+		_, _ = startLauncherInNewConsole(gui)
 		return updateModeError(fmt.Sprintf("新版本启动失败，已回滚: %v", err))
 	}
 	exited := make(chan error, 1)
@@ -801,21 +796,34 @@ func applyUpdateMode(args []string) int {
 	case err := <-exited:
 		if err != nil {
 			rollbackErr := tx.Rollback()
-			old := exec.Command(gui)
-			old.Dir = target
-			_ = old.Start()
+			_, _ = startLauncherInNewConsole(gui)
 			if rollbackErr != nil {
 				return updateModeError(fmt.Sprintf("新版本启动失败且回滚不完整: %v; %v", err, rollbackErr))
 			}
 			return updateModeError(fmt.Sprintf("新版本启动失败，已回滚: %v", err))
 		}
 	case <-time.After(800 * time.Millisecond):
-		// 新启动器已进入正常状态窗口或开始打开客户端，提交本次更新。
+		// 新终端启动器已进入正常流程或开始打开客户端，提交本次更新。
 	}
 	tx.Commit()
 	cleanupStagedUpdate(source)
 	logEvent("工具已更新到 %s", version)
 	return 0
+}
+
+func startLauncherInNewConsole(path string, args ...string) (*exec.Cmd, error) {
+	cmd := newLauncherCommand(path, args...)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
+func newLauncherCommand(path string, args ...string) *exec.Cmd {
+	cmd := exec.Command(path, args...)
+	cmd.Dir = filepath.Dir(path)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: createNewConsole}
+	return cmd
 }
 
 func cleanupStagedUpdate(stageDir string) {
@@ -857,12 +865,6 @@ func waitForProcessExit(pid int, timeout time.Duration) error {
 
 func updateModeError(msg string) int {
 	logEvent("自更新失败: %s", msg)
-	title, _ := syscall.UTF16PtrFromString("Antigravity CN 更新失败")
-	text, _ := syscall.UTF16PtrFromString(msg)
-	procUpdateMessageBoxW.Call(0,
-		uintptr(unsafe.Pointer(text)),
-		uintptr(unsafe.Pointer(title)),
-		0x00000010, // MB_ICONERROR | MB_OK
-	)
+	_ = savePendingUpdateError(msg)
 	return 1
 }

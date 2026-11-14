@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -53,6 +54,10 @@ func statePath() string {
 
 func logPath() string {
 	return filepath.Join(appDataDir(), "logs", "launcher.log")
+}
+
+func updateErrorPath() string {
+	return filepath.Join(appDataDir(), "update-error.txt")
 }
 
 func defaultConfig() launcherConfig {
@@ -108,6 +113,22 @@ func saveState(st launcherState) error {
 
 func removeState() {
 	_ = os.Remove(statePath())
+}
+
+func savePendingUpdateError(message string) error {
+	if _, err := ensureAppDataDir(); err != nil {
+		return err
+	}
+	return os.WriteFile(updateErrorPath(), []byte(strings.TrimSpace(message)+"\n"), 0o644)
+}
+
+func consumePendingUpdateError() string {
+	data, err := os.ReadFile(updateErrorPath())
+	if err != nil {
+		return ""
+	}
+	_ = os.Remove(updateErrorPath())
+	return strings.TrimSpace(string(data))
 }
 
 func writeJSONAtomic(path string, value any) error {

@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -41,12 +40,14 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--apply-update" {
 		os.Exit(applyUpdateMode(os.Args[2:]))
 	}
-	// Win32 窗口和消息队列绑定到创建它的 OS 线程,必须让主 goroutine 固定在同一线程。
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+	ui, err := newLauncherUI()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "错误：无法初始化终端启动器:", err)
+		os.Exit(1)
+	}
 	mutex, acquired := acquireLauncherMutex()
 	if !acquired {
-		showNativeError("Antigravity CN", "Antigravity CN 已在运行，请使用现有窗口。")
+		ui.reportFatal("Antigravity CN 已在运行，请先关闭现有启动器。", 0)
 		os.Exit(0)
 	}
 	if mutex != 0 {
@@ -54,15 +55,10 @@ func main() {
 	}
 	opts, err := parseLauncherOptions(os.Args[1:])
 	if err != nil {
-		showNativeError("Antigravity CN", err.Error())
+		ui.reportFatal("启动参数错误："+err.Error(), 2)
 		os.Exit(2)
 	}
-	ui, err := newLauncherUI()
-	if err != nil {
-		showNativeError("Antigravity CN", err.Error())
-		os.Exit(1)
-	}
-	go func() {
+	func() {
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				logEvent("启动器发生异常: %v", recovered)
@@ -71,11 +67,8 @@ func main() {
 		}()
 		runLauncherWorkflow(ui, opts)
 	}()
-	ui.run()
 
-	ui.mu.Lock()
-	code := ui.exitCode
-	ui.mu.Unlock()
+	code := ui.exitCodeValue()
 	if code != 0 {
 		os.Exit(code)
 	}
@@ -133,6 +126,9 @@ func runLauncherWorkflow(ui *launcherUI, opts launcherOptions) {
 		exeDir = filepath.Dir(exe)
 	}
 	cfg := loadConfig()
+	if pending := consumePendingUpdateError(); pending != "" {
+		ui.warn("上次工具更新未完成：" + pending)
+	}
 	appDir := getAntigravityDir(opts.AppDir)
 	ui.showBusy("正在检查启动环境", "正在检查本地补丁与工具更新…", 0, false)
 
@@ -181,7 +177,8 @@ func runLauncherWorkflow(ui *launcherUI, opts launcherOptions) {
 		logEvent("本地状态检查失败: %v", local.err)
 	}
 	localDetail := describeLocalStatus(local.status)
-	ui.showBusy("正在检查启动环境", localDetail+"\n\n正在等待工具更新检查…", 18, false)
+	ui.showBusy("正在检查启动环境", localDetail, 18, false)
+	ui.showBusy("正在检查启动环境", "正在等待工具更新检查…", 18, false)
 	updateResult := <-updateCh
 	updateNote := updateResult.note
 	if updateResult.err != nil {
@@ -207,6 +204,9 @@ func runLauncherWorkflow(ui *launcherUI, opts launcherOptions) {
 				return
 			}
 		}
+	}
+	if strings.TrimSpace(updateNote) != "" {
+		ui.showBusy("正在检查启动环境", updateNote+"。", 28, false)
 	}
 
 	if local.status.Error != "" {
@@ -253,9 +253,6 @@ func runLauncherWorkflow(ui *launcherUI, opts launcherOptions) {
 	}
 
 	detailLines := []string{}
-	if strings.TrimSpace(updateNote) != "" {
-		detailLines = append(detailLines, updateNote+"。")
-	}
 	if patched {
 		detailLines = append(detailLines, fmt.Sprintf("补丁已就绪：客户端 %s，命中 %d/%d 条规则。",
 			orUnknown(result.ClientVersion), result.RulesHit, result.RulesTotal))
@@ -269,19 +266,14 @@ func runLauncherWorkflow(ui *launcherUI, opts launcherOptions) {
 		))
 	}
 	detailLines = append(detailLines, "正在启动 Antigravity…")
-	wait := time.Second
-	if result.CandidateCountAvailable && result.NewCandidateCount > 0 {
-		wait = 2500 * time.Millisecond
-	}
-	ui.showBusy("中文环境已就绪", strings.Join(detailLines, "\n"), 100, false)
+	ui.showBusy("正在启动", strings.Join(detailLines, "\n"), 100, false)
 	time.Sleep(180 * time.Millisecond)
 	if err := launchAntigravity(appDir); err != nil {
 		logEvent("启动 Antigravity 失败: %v", err)
 		showLaunchFailure(ui, err.Error())
 		return
 	}
-	time.Sleep(wait)
-	ui.finish(0)
+	showLaunchedState(ui, "运行完成", "Antigravity 已启动，中文环境已就绪。")
 }
 
 func describeLocalStatus(st patchStatus) string {
@@ -296,6 +288,14 @@ func describeLocalStatus(st patchStatus) string {
 		return fmt.Sprintf("本地状态：客户端 %s，需要更新中文补丁", version)
 	}
 	return fmt.Sprintf("本地状态：客户端 %s，中文补丁已就绪", version)
+}
+
+func showLaunchedState(ui *launcherUI, title, detail string) {
+	ui.showReady(title, detail)
+	if ui.ownsConsole {
+		bringLauncherConsoleToFront()
+	}
+	ui.countdownAndFinish(3)
 }
 
 const (
@@ -334,7 +334,11 @@ func promptAndApplyUpdate(ui *launcherUI, exeDir string, rel *toolRelease) (choi
 			client := &http.Client{Timeout: 10 * time.Minute}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 			staged, err := prepareToolUpdate(ctx, rel, client, func(stage string, pct int) {
-				ui.showBusy("正在更新汉化工具", stage, pct, false)
+				if strings.Contains(stage, "MB") {
+					ui.updateProgress("正在更新汉化工具", stage, pct)
+				} else {
+					ui.showBusy("正在更新汉化工具", stage, pct, false)
+				}
 			})
 			cancel()
 			if err == nil {
@@ -434,7 +438,7 @@ func showPatchFailure(ui *launcherUI, title, detail, appDir string, allowEnglish
 					detail += "\n\n以英文启动失败：" + err.Error()
 					continue
 				}
-				ui.finish(0)
+				showLaunchedState(ui, "运行完成", "Antigravity 已以英文启动。")
 				return
 			case 2:
 				if err := openLauncherLog(); err != nil {
@@ -505,15 +509,4 @@ func launchAntigravity(appDir string) error {
 		return err
 	}
 	return cmd.Process.Release()
-}
-
-func showNativeError(title, text string) {
-	title16, _ := syscall.UTF16PtrFromString(title)
-	text16, _ := syscall.UTF16PtrFromString(text)
-	procUpdateMessageBoxW.Call(
-		0,
-		uintptr(unsafe.Pointer(text16)),
-		uintptr(unsafe.Pointer(title16)),
-		0x00000010,
-	)
 }

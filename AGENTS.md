@@ -12,7 +12,7 @@
 | `main.go` | **汉化引擎**:路径/版本/进程检测、应用、还原、`--verify`,Win32 集成(version.dll / tasklist) |
 | `cli_main.go` | 控制台入口(`!launcher`):参数解析、交互菜单、`--status`、快捷方式与更新检查开关 |
 | `launcher_main.go` | **推荐用户入口**(`launcher`):检查更新/本地补丁、必要时汉化、启动 Antigravity |
-| `launcher_ui.go` | 原生 Win32 状态窗口(无第三方 GUI 依赖) |
+| `launcher_ui.go` | 原生终端界面:完整步骤日志、颜色区分、`↑/↓` 菜单与倒计时 |
 | `update.go` | GitHub 稳定版检测、版本比较、SHA256、安全解压、自更新事务与 `--apply-update` |
 | `status.go` | 本地补丁状态检查(版本 / 注入标记 / 资源包 / 词典哈希 / state 匹配) |
 | `appdata.go` | `%LOCALAPPDATA%\Antigravity-Chinese` 下的配置、状态、原子 JSON 与日志轮转 |
@@ -23,9 +23,10 @@
 | `rules.go` | 词典加载与规则执行(exact / regex / keys / quoted)+ 命中统计 |
 | `scan.go` | `--scan` 兼容性扫描报告 |
 | `translations_settings.json` | 词典与规则(声明式,适配新版本只改这里,不动代码) |
+| `assets/antigravity-cn.ico` | 启动器多尺寸图标(16–256px);`rsrc_windows_amd64.syso` 由其生成并随构建自动嵌入 |
 | `patch_settings.py` | **Python 参考实现(验证基准)**:与 Go 版输出必须逐字节一致 |
-| `antigravity-chinese.exe` | **用户入口**:双击显示交互菜单(应用 / 还原 / 扫描 / 验证)并自动暂停;终端调用保持命令行行为(二进制不入库,经 Releases 分发) |
-| `antigravity-cn.exe` | **推荐入口**:原生 GUI 启动器,自动检查工具更新与补丁后启动客户端(二进制不入库) |
+| `设置与维护.exe` | **维护入口**:双击显示交互菜单(应用 / 还原 / 扫描 / 验证)并自动暂停;终端调用保持命令行行为(二进制不入库,经 Releases 分发) |
+| `antigravity-cn.exe` | **推荐入口**:终端启动器,自动检查工具更新与补丁后启动客户端(二进制不入库) |
 | `scan_report.txt` | `--scan` 生成的报告(已 gitignore) |
 | `_work/` | 本地临时分析目录(已 gitignore,**严禁提交任何提取产物**) |
 | `_tools/` | 本地 Go 工具链(已 gitignore) |
@@ -34,8 +35,14 @@
 
 ```bash
 go test ./...
-go build -trimpath -ldflags "-s -w -X main.toolVersion=v2.33.0" -o antigravity-chinese.exe .
-go build -trimpath -tags launcher -ldflags "-s -w -H windowsgui -X main.toolVersion=v2.33.0" -o antigravity-cn.exe .
+go build -trimpath -ldflags "-s -w -X main.toolVersion=v2.33.1" -o '设置与维护.exe' .
+go build -trimpath -tags launcher -ldflags "-s -w -X main.toolVersion=v2.33.1" -o antigravity-cn.exe .
+```
+
+仅在图标变更时需要重新生成 Windows 资源对象:
+
+```bash
+go run github.com/akavel/rsrc@latest -ico assets/antigravity-cn.ico -o rsrc_windows_amd64.syso
 ```
 
 ---
@@ -45,20 +52,20 @@ go build -trimpath -tags launcher -ldflags "-s -w -H windowsgui -X main.toolVers
 **日常(客户端更新后界面变回英文):** 关闭客户端,从桌面 `Antigravity CN` 快捷方式启动
 (即 `antigravity-cn.exe`)。启动器会检查版本、补丁标记、资源包和词典哈希,必要时自动重新汉化。
 
-维护时双击 `antigravity-chinese.exe` 选 `1. 应用中文补丁`(或终端 `--apply`)。
+维护时双击 `设置与维护.exe` 选 `1. 应用中文补丁`(或终端 `--apply`)。
 若输出提示"命中率偏低",说明新版文案有变化,进入适配流程。
 
 **适配新版本:**
 
-1. `antigravity-chinese.exe --scan` → 查看 `scan_report.txt`:
+1. `设置与维护.exe --scan` → 查看 `scan_report.txt`:
    - 「未命中规则」= 失效条目,需重新定位到新版文案;
    - 「未汉化候选」= 新版新增文案,按需补进词典。
 2. 更新 `translations_settings.json`。
-3. `antigravity-chinese.exe --verify` → 目标 **全部命中**(不要带着未命中就应用)。
+3. `设置与维护.exe --verify` → 目标 **全部命中**(不要带着未命中就应用)。
 4. **交叉验证**(改了规则/引擎时必做):`python -u _work/hash_py.py`(参考实现打印 sha256)
    与 Go 版 `--verify` 打印的 sha256 必须一致。
 5. **模拟安装目录全流程验证**(见第 5 节),通过后才允许动真机。
-6. **关闭客户端**(Electron 锁住 asar),再 `antigravity-chinese.exe` 应用。
+6. **关闭客户端**(Electron 锁住 asar),再 `设置与维护.exe` 应用。
 
 ---
 
@@ -138,8 +145,8 @@ New-Item -ItemType Directory -Force -Path _work\fake\resources\bin | Out-Null
 Copy-Item "$env:LOCALAPPDATA\Programs\antigravity\resources\app.asar" '_work\fake\resources\app.asar' -Force
 Copy-Item "$env:LOCALAPPDATA\Programs\antigravity\resources\bin\language_server.exe" '_work\fake\resources\bin\language_server.exe' -Force
 
-.\antigravity-chinese.exe --path _work/fake              # 打补丁
-.\antigravity-chinese.exe --restore --path _work/fake    # 还原
+.\设置与维护.exe --path _work/fake              # 打补丁
+.\设置与维护.exe --restore --path _work/fake    # 还原
 ```
 
 校验标准(缺一不可):
@@ -185,6 +192,7 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 - 还原优先"逆向移除注入"(不依赖备份),失败才回退备份;备份版本不一致会告警。
 - 启动器配置:`%LOCALAPPDATA%\Antigravity-Chinese\config.json`(`updateCheckEnabled`);
   状态:`state.json`(客户端版本、词典/资源包 SHA256、未知文案基线、候选数量);
+- 自更新失败写入 `update-error.txt`,下次从终端启动器启动时显示并自动清除;不使用 `MessageBox`;
 - 启动器自更新保留旧词典 `translations_settings.json.bak`,并在替换失败时回滚两个 exe 与词典。
 
 ---
@@ -201,17 +209,18 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 ## 9. 当前状态
 
 - 引擎:**Go 1.21+(仅标准库)**,两个 exe 均无第三方依赖;Python 版保留为验证基准与回退;
-- 工具版本:**v2.33.0**;已验证客户端:**2.32.1**;(2026-11)规则 **1504 条全命中**、2042 处替换;
+- 工具版本:**v2.33.1**;已验证客户端:**2.32.1**;(2026-11)规则 **1504 条全命中**、2042 处替换;
 - 性能:全流程约 **4.4 秒**(读取 206MB exe + 提取 + 应用 + 打包 + 注入 + 回读校验);
   启动器候选文案扫描 12MB 文本约 **44ms**;常规启动不执行全量候选扫描;
-- 新入口:`antigravity-cn.exe` 原生 GUI,启动时检查工具更新 + 本地补丁,自动汉化并打开客户端;
+- 新入口:`antigravity-cn.exe` 原生终端启动器,完整保留自检步骤,启动时检查工具更新 + 本地补丁,自动汉化并打开客户端;
   不复制客户端、不做双模式、不常驻;官方更新后下次从该入口启动即恢复中文;
+  正常完成后显示 3 秒倒计时并自动退出;失败和选项全部在当前终端中用颜色与 `↑/↓` 菜单处理;
 - 验收记录:`--verify` sha256 `a8798316…b6ee2` 与 Python 一致;模拟目录 asar 逐字节一致;zip 548 条目零差异;`--scan` 报告 210 行零差异;
 - 覆盖范围:**设置界面(Ctrl+,)全部页面** + **主侧栏/项目分组、对话操作按钮与悬停提示** + **欢迎语、输入框占位符、语音模式、模型选择器无障碍标签** + **命令面板 / 右键菜单 / 对话区按钮** + **通知与对话框标题、反馈问卷选项、See all/See more 展开器、环境与区域选择等杂项**;
 - 扫描候选已覆盖 `label/title/description/displayName/sectionTitle/shortDescription/text/tooltipText/sidebarLabel/searchPlaceholder/tooltip/placeholder` 十三类属性(新类带词边界防误报);
 - 有意保留英文:服务端下发的动态选项(`Knowledge Work` / `Software Engineering`)、模型名与档位、项目名/对话标题等用户数据、调试/内部面板(轨迹检查器)、LaTeX 渲染选项、内部代号(Hub / CitC / Cog / Google3)、`emptyMessageSingular/Plural`(复数化词形,与外部模板拼接);
 - **发布流程**:打 tag 即云端自动构建发布(`.github/workflows/release.yml`)——
-  `git tag v2.33.0 && git push origin v2.33.0`,GitHub Actions 会编译两个 exe、生成
+  `git tag v2.33.1 && git push origin v2.33.1`,GitHub Actions 会编译两个 exe、生成
   `checksums.txt`、打包(启动器 + 控制台工具 + 词典 + README)并生成中文 Release 说明;
   Release 资产包含两个 exe 与校验文件;重复推送同一 tag 时自动改为覆盖上传资产;
 - 后续(可选):官方新版发布后跑 `--scan`,按报告增量适配即可。
@@ -236,6 +245,10 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 7. **启动器与自更新**:`toolVersion` 由发布 tag 经 `-X main.toolVersion=...` 注入;`dev` 跳过更新检查。
    更新包通过 HTTPS 下载,先校验 `checksums.txt` 中的 zip SHA256,再只按固定文件名安全解压;
    旧进程退出后由临时启动器执行 `--apply-update`,失败必须回滚;新启动器若立即异常退出也要回滚。
+   `antigravity-cn.exe` 必须是控制台子系统;自更新助手隐藏运行,但重启启动器时必须带
+   `CREATE_NEW_CONSOLE`,否则新终端会继承隐藏控制台。
+   Windows Terminal/ConPTY 下 `GetConsoleWindow` 不保证是可见顶层窗口;居中必须按
+   `SetConsoleTitleW` 设置的标题枚举可见窗口并重试,不能只调用 `SetWindowPos(GetConsoleWindow())`。
    启动器使用命名互斥量防止双击产生两个实例并发写入。
 8. **状态判断**:`NeedsPatch` 必须综合客户端版本、`_customBundle` 注入标记、`web_bundle.zip`
    有效性、词典 SHA256 和 `state.json`,不能只比较版本号。

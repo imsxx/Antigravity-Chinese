@@ -55,7 +55,7 @@ func createDesktopShortcut(exeDir string) error {
 }
 
 func createShortcutForDir(exeDir string, force bool) error {
-	target := filepath.Join(exeDir, "antigravity-cn.exe")
+	target := filepath.Join(exeDir, launcherExeName)
 	if st, err := os.Stat(target); err != nil || st.IsDir() {
 		return fmt.Errorf("未找到 Antigravity CN 启动器: %s", target)
 	}

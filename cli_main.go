@@ -297,7 +297,7 @@ func runMenu(appDir, exeDir string, rules []*Rule) int {
 }
 
 func printUsage() {
-	fmt.Println("用法: antigravity-chinese.exe [选项]")
+	fmt.Printf("用法: %s [选项]\n", maintenanceExeName)
 	fmt.Println("  (无选项)    应用中文补丁;双击运行时显示交互菜单")
 	fmt.Println("  --apply     应用中文补丁(显式指定,供脚本使用)")
 	fmt.Println("  --restore   还原为官方英文(优先逆向移除注入,不依赖备份)")

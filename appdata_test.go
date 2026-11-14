@@ -69,3 +69,19 @@ func TestLogRotation(t *testing.T) {
 		t.Fatal("日志路径异常")
 	}
 }
+
+func TestPendingUpdateErrorRoundTrip(t *testing.T) {
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	if got := consumePendingUpdateError(); got != "" {
+		t.Fatalf("初始不应有更新错误: %q", got)
+	}
+	if err := savePendingUpdateError("下载更新包失败"); err != nil {
+		t.Fatal(err)
+	}
+	if got := consumePendingUpdateError(); got != "下载更新包失败" {
+		t.Fatalf("读取更新错误 = %q", got)
+	}
+	if got := consumePendingUpdateError(); got != "" {
+		t.Fatalf("更新错误应在读取后清除: %q", got)
+	}
+}

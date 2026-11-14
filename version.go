@@ -4,8 +4,11 @@ package main
 var toolVersion = "dev"
 
 const (
-	repoOwner     = "imsxx"
-	repoName      = "Antigravity-Chinese"
-	repoLatestURL = "https://github.com/imsxx/Antigravity-Chinese/releases/latest"
-	repoAPIURL    = "https://api.github.com/repos/imsxx/Antigravity-Chinese/releases/latest"
+	repoOwner          = "imsxx"
+	repoName           = "Antigravity-Chinese"
+	repoLatestURL      = "https://github.com/imsxx/Antigravity-Chinese/releases/latest"
+	repoAPIURL         = "https://api.github.com/repos/imsxx/Antigravity-Chinese/releases/latest"
+	launcherExeName    = "antigravity-cn.exe"
+	maintenanceExeName = "设置与维护.exe"
+	dictionaryFileName = "translations_settings.json"
 )

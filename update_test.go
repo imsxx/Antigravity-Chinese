@@ -43,7 +43,7 @@ func makeUpdateZip(t *testing.T, files map[string]string) []byte {
 func TestPrepareToolUpdateAndChecksum(t *testing.T) {
 	t.Setenv("LOCALAPPDATA", t.TempDir())
 	files := map[string]string{
-		"antigravity-v2.33.0/antigravity-chinese.exe":    "MZcli",
+		"antigravity-v2.33.0/设置与维护.exe":                  "MZcli",
 		"antigravity-v2.33.0/antigravity-cn.exe":         "MZgui",
 		"antigravity-v2.33.0/translations_settings.json": minimalDictionary(),
 	}
@@ -109,7 +109,7 @@ func TestFetchLatestReleaseTimeout(t *testing.T) {
 func TestPrepareToolUpdateChecksumFailure(t *testing.T) {
 	t.Setenv("LOCALAPPDATA", t.TempDir())
 	zipData := makeUpdateZip(t, map[string]string{
-		"antigravity-chinese.exe":    "MZcli",
+		"设置与维护.exe":                  "MZcli",
 		"antigravity-cn.exe":         "MZgui",
 		"translations_settings.json": minimalDictionary(),
 	})
@@ -135,7 +135,7 @@ func TestExtractToolUpdateRejectsMissingAndBadFiles(t *testing.T) {
 	dir := t.TempDir()
 	good := filepath.Join(dir, "good.zip")
 	writeZip(t, good, map[string]string{
-		"../nested/antigravity-chinese.exe": "MZcli",
+		"../nested/设置与维护.exe":               "MZcli",
 		"nested/antigravity-cn.exe":         "MZgui",
 		"nested/translations_settings.json": minimalDictionary(),
 	})
@@ -148,7 +148,7 @@ func TestExtractToolUpdateRejectsMissingAndBadFiles(t *testing.T) {
 	}
 	bad := filepath.Join(dir, "bad.zip")
 	writeZip(t, bad, map[string]string{
-		"antigravity-chinese.exe":    "not-pe",
+		"设置与维护.exe":                  "not-pe",
 		"antigravity-cn.exe":         "MZgui",
 		"translations_settings.json": minimalDictionary(),
 	})
@@ -166,7 +166,7 @@ func TestUpdateTransactionRollbackAndCommit(t *testing.T) {
 	target := t.TempDir()
 	stagedDir := t.TempDir()
 	for name, body := range map[string]string{
-		"antigravity-chinese.exe":    "MZnewcli",
+		"设置与维护.exe":                  "MZnewcli",
 		"antigravity-cn.exe":         "MZnewgui",
 		"translations_settings.json": minimalDictionary(),
 	} {
@@ -175,7 +175,7 @@ func TestUpdateTransactionRollbackAndCommit(t *testing.T) {
 		}
 	}
 	for name, body := range map[string]string{
-		"antigravity-chinese.exe":    "MZoldcli",
+		"设置与维护.exe":                  "MZoldcli",
 		"antigravity-cn.exe":         "MZoldgui",
 		"translations_settings.json": `{"exact_strings":{"Old":"旧"}}`,
 	} {
@@ -185,7 +185,7 @@ func TestUpdateTransactionRollbackAndCommit(t *testing.T) {
 	}
 	staged := stagedToolUpdate{
 		Dir:        stagedDir,
-		CLIExe:     filepath.Join(stagedDir, "antigravity-chinese.exe"),
+		CLIExe:     filepath.Join(stagedDir, "设置与维护.exe"),
 		GUIExe:     filepath.Join(stagedDir, "antigravity-cn.exe"),
 		Dictionary: filepath.Join(stagedDir, "translations_settings.json"),
 	}
@@ -216,5 +216,26 @@ func TestUpdateTransactionRollbackAndCommit(t *testing.T) {
 	tx2.Commit()
 	if _, err := os.Stat(tx2.BackupDir); !os.IsNotExist(err) {
 		t.Fatal("提交后回滚目录未清理")
+	}
+}
+
+func TestUpdateModeErrorPersistsForTerminalNotice(t *testing.T) {
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	if code := updateModeError("模拟下载失败"); code != 1 {
+		t.Fatalf("更新失败退出码 = %d, 期望 1", code)
+	}
+	if got := consumePendingUpdateError(); got != "模拟下载失败" {
+		t.Fatalf("待显示更新错误 = %q", got)
+	}
+}
+
+func TestRestartedLauncherUsesVisibleConsole(t *testing.T) {
+	path := filepath.Join(`C:\test`, "antigravity-cn.exe")
+	cmd := newLauncherCommand(path, "--updated", "v2.33.1")
+	if cmd.SysProcAttr == nil || cmd.SysProcAttr.CreationFlags&createNewConsole == 0 {
+		t.Fatal("更新后重启启动器必须创建新的可见控制台")
+	}
+	if cmd.Dir != `C:\test` {
+		t.Fatalf("启动器工作目录 = %q", cmd.Dir)
 	}
 }
