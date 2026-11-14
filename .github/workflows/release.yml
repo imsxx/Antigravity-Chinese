@@ -61,10 +61,10 @@ jobs:
           $zip = "antigravity-chinese-$tag.zip"
           Compress-Archive -Path $dir -DestinationPath $zip -Force
 
+          # 仅校验独立资产;词典与 README 在 zip 内,由 zip 的 SHA256 覆盖。
           $assetNames = @(
             'antigravity-chinese.exe',
             'antigravity-cn.exe',
-            'translations_settings.json',
             $zip
           )
           $lines = foreach ($name in $assetNames) {
