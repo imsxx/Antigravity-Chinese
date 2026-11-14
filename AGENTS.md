@@ -9,13 +9,23 @@
 
 | 文件 | 作用 |
 |---|---|
-| `main.go` | **主引擎(用户入口)**:路径/版本/进程检测、应用、还原、`--verify`,Win32 集成(version.dll / tasklist / 控制台 CP) |
+| `main.go` | **汉化引擎**:路径/版本/进程检测、应用、还原、`--verify`,Win32 集成(version.dll / tasklist) |
+| `cli_main.go` | 控制台入口(`!launcher`):参数解析、交互菜单、`--status`、快捷方式与更新检查开关 |
+| `launcher_main.go` | **推荐用户入口**(`launcher`):检查更新/本地补丁、必要时汉化、启动 Antigravity |
+| `launcher_ui.go` | 原生 Win32 状态窗口(无第三方 GUI 依赖) |
+| `update.go` | GitHub 稳定版检测、版本比较、SHA256、安全解压、自更新事务与 `--apply-update` |
+| `status.go` | 本地补丁状态检查(版本 / 注入标记 / 资源包 / 词典哈希 / state 匹配) |
+| `appdata.go` | `%LOCALAPPDATA%\Antigravity-Chinese` 下的配置、状态、原子 JSON 与日志轮转 |
+| `candidates.go` | 新版未汉化文案单遍扫描(仅版本变化时执行) |
+| `patchio.go` | asar/资源包临时文件校验后的事务替换与回滚 |
+| `shortcut.go` | 原生 COM 创建当前用户桌面 `Antigravity CN.lnk` |
 | `asar.go` | asar 读写(Chromium Pickle)+ **保序 JSON** 解析与紧凑重建 |
 | `rules.go` | 词典加载与规则执行(exact / regex / keys / quoted)+ 命中统计 |
 | `scan.go` | `--scan` 兼容性扫描报告 |
 | `translations_settings.json` | 词典与规则(声明式,适配新版本只改这里,不动代码) |
 | `patch_settings.py` | **Python 参考实现(验证基准)**:与 Go 版输出必须逐字节一致 |
 | `antigravity-chinese.exe` | **用户入口**:双击显示交互菜单(应用 / 还原 / 扫描 / 验证)并自动暂停;终端调用保持命令行行为(二进制不入库,经 Releases 分发) |
+| `antigravity-cn.exe` | **推荐入口**:原生 GUI 启动器,自动检查工具更新与补丁后启动客户端(二进制不入库) |
 | `scan_report.txt` | `--scan` 生成的报告(已 gitignore) |
 | `_work/` | 本地临时分析目录(已 gitignore,**严禁提交任何提取产物**) |
 | `_tools/` | 本地 Go 工具链(已 gitignore) |
@@ -23,14 +33,19 @@
 构建(仅标准库,无需网络):
 
 ```bash
-go build -trimpath -ldflags "-s -w" -o antigravity-chinese.exe .
+go test ./...
+go build -trimpath -ldflags "-s -w -X main.toolVersion=v2.33.0" -o antigravity-chinese.exe .
+go build -trimpath -tags launcher -ldflags "-s -w -H windowsgui -X main.toolVersion=v2.33.0" -o antigravity-cn.exe .
 ```
 
 ---
 
 ## 2. 日常使用与版本适配流程
 
-**日常(客户端自动更新后界面变回英文):** 双击 `antigravity-chinese.exe` 选 `1. 应用中文补丁`(或终端 `--apply`)。
+**日常(客户端更新后界面变回英文):** 关闭客户端,从桌面 `Antigravity CN` 快捷方式启动
+(即 `antigravity-cn.exe`)。启动器会检查版本、补丁标记、资源包和词典哈希,必要时自动重新汉化。
+
+维护时双击 `antigravity-chinese.exe` 选 `1. 应用中文补丁`(或终端 `--apply`)。
 若输出提示"命中率偏低",说明新版文案有变化,进入适配流程。
 
 **适配新版本:**
@@ -105,6 +120,15 @@ go build -trimpath -ldflags "-s -w" -o antigravity-chinese.exe .
 
 - 见第 5 节;**绝不在真机上直接试错**。
 
+### 教训 6:资源写入必须是事务(先校验,后替换)
+
+- `web_bundle.zip` 与 `app.asar` 不能直接写到正式路径后再校验;
+  必须先在资源目录生成临时文件、回读校验全部条目,最后通过 `patchio.go` 事务替换;
+- 事务替换统一使用 Win32 `MoveFileExW`(`REPLACE_EXISTING | WRITE_THROUGH`),
+  **禁止**“先删除目标文件再重命名”的非原子写法;
+- 事务需要备份操作前的 asar/资源包;任一步失败要恢复两者,不能留下“新资源包 + 旧 asar”的半汉化状态;
+- 还原英文同样走事务。备份版本与当前客户端不一致时**不得覆盖**当前 asar。
+
 ---
 
 ## 5. 模拟安装目录验证(改引擎 / 词典后必做)
@@ -159,6 +183,9 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 - 首次应用创建 `app.asar.bak` + `app.asar.bak.version`(版本标记);
   版本变化且当前未打补丁时自动刷新备份;
 - 还原优先"逆向移除注入"(不依赖备份),失败才回退备份;备份版本不一致会告警。
+- 启动器配置:`%LOCALAPPDATA%\Antigravity-Chinese\config.json`(`updateCheckEnabled`);
+  状态:`state.json`(客户端版本、词典/资源包 SHA256、未知文案基线、候选数量);
+- 启动器自更新保留旧词典 `translations_settings.json.bak`,并在替换失败时回滚两个 exe 与词典。
 
 ---
 
@@ -173,16 +200,20 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 
 ## 9. 当前状态
 
-- 引擎:**Go 1.21+(仅标准库)**,`antigravity-chinese.exe` 约 3.0MB;Python 版保留为验证基准与回退;
-- 已验证版本:**2.32.1**;(2026-11)规则 **1504 条全命中**、2042 处替换;
+- 引擎:**Go 1.21+(仅标准库)**,两个 exe 均无第三方依赖;Python 版保留为验证基准与回退;
+- 工具版本:**v2.33.0**;已验证客户端:**2.32.1**;(2026-11)规则 **1504 条全命中**、2042 处替换;
 - 性能:全流程约 **4.4 秒**(读取 206MB exe + 提取 + 应用 + 打包 + 注入 + 回读校验);
+  启动器候选文案扫描 12MB 文本约 **44ms**;常规启动不执行全量候选扫描;
+- 新入口:`antigravity-cn.exe` 原生 GUI,启动时检查工具更新 + 本地补丁,自动汉化并打开客户端;
+  不复制客户端、不做双模式、不常驻;官方更新后下次从该入口启动即恢复中文;
 - 验收记录:`--verify` sha256 `a8798316…b6ee2` 与 Python 一致;模拟目录 asar 逐字节一致;zip 548 条目零差异;`--scan` 报告 210 行零差异;
 - 覆盖范围:**设置界面(Ctrl+,)全部页面** + **主侧栏/项目分组、对话操作按钮与悬停提示** + **欢迎语、输入框占位符、语音模式、模型选择器无障碍标签** + **命令面板 / 右键菜单 / 对话区按钮** + **通知与对话框标题、反馈问卷选项、See all/See more 展开器、环境与区域选择等杂项**;
 - 扫描候选已覆盖 `label/title/description/displayName/sectionTitle/shortDescription/text/tooltipText/sidebarLabel/searchPlaceholder/tooltip/placeholder` 十三类属性(新类带词边界防误报);
 - 有意保留英文:服务端下发的动态选项(`Knowledge Work` / `Software Engineering`)、模型名与档位、项目名/对话标题等用户数据、调试/内部面板(轨迹检查器)、LaTeX 渲染选项、内部代号(Hub / CitC / Cog / Google3)、`emptyMessageSingular/Plural`(复数化词形,与外部模板拼接);
 - **发布流程**:打 tag 即云端自动构建发布(`.github/workflows/release.yml`)——
-  `git tag v2.32.1 && git push origin v2.32.1`,GitHub Actions 会编译 exe、打包(exe + 词典 + README)
-  并生成中文 Release 说明(含源码提交链接与压缩包 SHA256);重复推送同一 tag 时自动改为覆盖上传资产;
+  `git tag v2.33.0 && git push origin v2.33.0`,GitHub Actions 会编译两个 exe、生成
+  `checksums.txt`、打包(启动器 + 控制台工具 + 词典 + README)并生成中文 Release 说明;
+  Release 资产包含两个 exe 与校验文件;重复推送同一 tag 时自动改为覆盖上传资产;
 - 后续(可选):官方新版发布后跑 `--scan`,按报告增量适配即可。
 
 ---
@@ -202,3 +233,9 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
    `Method/Modified/ExternalAttrs`,保证内容与顺序不变;
 6. **验证是硬门槛**:任何影响输出的改动(引擎逻辑、词典、打包),必须先过第 2 节第 4/5 步的
    sha256 与逐字节交叉验证,否则不许上真机。
+7. **启动器与自更新**:`toolVersion` 由发布 tag 经 `-X main.toolVersion=...` 注入;`dev` 跳过更新检查。
+   更新包通过 HTTPS 下载,先校验 `checksums.txt` 中的 zip SHA256,再只按固定文件名安全解压;
+   旧进程退出后由临时启动器执行 `--apply-update`,失败必须回滚;新启动器若立即异常退出也要回滚。
+   启动器使用命名互斥量防止双击产生两个实例并发写入。
+8. **状态判断**:`NeedsPatch` 必须综合客户端版本、`_customBundle` 注入标记、`web_bundle.zip`
+   有效性、词典 SHA256 和 `state.json`,不能只比较版本号。
