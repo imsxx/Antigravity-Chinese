@@ -35,8 +35,8 @@
 
 ```bash
 go test ./...
-go build -trimpath -ldflags "-s -w -X main.toolVersion=v2.33.1" -o '设置与维护.exe' .
-go build -trimpath -tags launcher -ldflags "-s -w -X main.toolVersion=v2.33.1" -o antigravity-cn.exe .
+go build -trimpath -ldflags "-s -w -X main.toolVersion=v2.34.0" -o '设置与维护.exe' .
+go build -trimpath -tags launcher -ldflags "-s -w -X main.toolVersion=v2.34.0" -o antigravity-cn.exe .
 ```
 
 仅在图标变更时需要重新生成 Windows 资源对象:
@@ -168,13 +168,13 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 
 ---
 
-## 6. 关键锚点(基于 v2.32.1 实测,升级后需复核)
+## 6. 关键锚点(基于 v2.34.0 实测,升级后需复核)
 
 - 注入锚点(`dist/languageServer.js`):`'--enable_sidecars',\n        ];`
 - 注入标记:`_customBundle`(还原时逆向移除,结果与官方逐字节一致)
 - 注入依赖:`fs`、`path_1` 均为模块顶层常量(TS 编译产物,已验证作用域安全)
 - 界面资源:从 `bin/language_server.exe` 内嵌 zip 提取(定位 `PK\x05\x06` 并校验含 `main.js` + `index.html`)
-- 设置导航数组:`var fEb=[{screen:"General"},...]` 与 `mEb=new Map([...fEb.map(...),["Provide Feedback","Give Feedback"]])`(导航标签翻译在此注入)
+- 设置导航数组:`var wMb=[{screen:"General"},...]` 与 `yMb=new Map([...wMb.filter(...).map(...),["Provide Feedback","Give Feedback"]])`(导航标签翻译在此注入)
 - 设置注册表:`["settingKey",{isProviderSetting:!0,screen:"General",label:"...",description:"..."}]`
   (旧版 `[Qi.XXX,{...}]` 形式仍需兼容扫描)
 - 主题卡片按 `displayName:"System"/"Light"/"Dark"` 渲染;翻译显示名时必须同步代码内的比较值
@@ -209,18 +209,18 @@ ok = f2['dist/languageServer.js'].replace(ps.INJECT_TEXT.encode(), b'', 1) == f1
 ## 9. 当前状态
 
 - 引擎:**Go 1.21+(仅标准库)**,两个 exe 均无第三方依赖;Python 版保留为验证基准与回退;
-- 工具版本:**v2.33.1**;已验证客户端:**2.32.1**;(2026-11)规则 **1504 条全命中**、2042 处替换;
-- 性能:全流程约 **4.4 秒**(读取 206MB exe + 提取 + 应用 + 打包 + 注入 + 回读校验);
+- 工具版本:**v2.34.0**;已验证客户端:**2.34.0**;(2026-11)规则 **1588 条全命中**、2151 处替换;
+- 性能:模拟目录全流程(读取 207MB exe + 提取 + 应用 + 打包 + 注入 + 回读校验)规则应用阶段约 **5.4 秒**;
   启动器候选文案扫描 12MB 文本约 **44ms**;常规启动不执行全量候选扫描;
 - 新入口:`antigravity-cn.exe` 原生终端启动器,完整保留自检步骤,启动时检查工具更新 + 本地补丁,自动汉化并打开客户端;
   不复制客户端、不做双模式、不常驻;官方更新后下次从该入口启动即恢复中文;
   正常完成后显示 3 秒倒计时并自动退出;失败和选项全部在当前终端中用颜色与 `↑/↓` 菜单处理;
-- 验收记录:`--verify` sha256 `a8798316…b6ee2` 与 Python 一致;模拟目录 asar 逐字节一致;zip 548 条目零差异;`--scan` 报告 210 行零差异;
-- 覆盖范围:**设置界面(Ctrl+,)全部页面** + **主侧栏/项目分组、对话操作按钮与悬停提示** + **欢迎语、输入框占位符、语音模式、模型选择器无障碍标签** + **命令面板 / 右键菜单 / 对话区按钮** + **通知与对话框标题、反馈问卷选项、See all/See more 展开器、环境与区域选择等杂项**;
+- 验收记录:`--verify` sha256 `44f2afd8…1bf84` 与 Python 一致;模拟目录 asar 逐字节一致;zip 548 条目零差异;`--scan` 报告 221 行零差异;
+- 覆盖范围:**设置界面(Ctrl+,)全部页面(含编排器设置、快捷键方案、内置浏览器数据与 Cookie 管理)** + **主侧栏/自定义侧边栏/项目分组、筛选排序、对话操作按钮与悬停提示** + **UI 插件与组合包、欢迎语、输入框占位符、语音模式、模型选择器无障碍标签** + **命令面板 / 右键菜单 / 对话区按钮** + **通知与对话框标题、反馈问卷选项、See all/See more 展开器、环境与区域选择等杂项**;
 - 扫描候选已覆盖 `label/title/description/displayName/sectionTitle/shortDescription/text/tooltipText/sidebarLabel/searchPlaceholder/tooltip/placeholder` 十三类属性(新类带词边界防误报);
-- 有意保留英文:服务端下发的动态选项(`Knowledge Work` / `Software Engineering`)、模型名与档位、项目名/对话标题等用户数据、调试/内部面板(轨迹检查器)、LaTeX 渲染选项、内部代号(Hub / CitC / Cog / Google3)、`emptyMessageSingular/Plural`(复数化词形,与外部模板拼接);
+- 有意保留英文:服务端下发的动态选项(`Knowledge Work` / `Software Engineering`)、模型名与档位、项目名/对话标题等用户数据、图标选择器内部名称、调试/内部面板(轨迹检查器)、LaTeX 渲染选项、内部代号(Hub / CitC / Cog / Google3 / ADEX / Buganizer / ELMO Composite)、`emptyMessageSingular/Plural`(复数化词形,与外部模板拼接);
 - **发布流程**:打 tag 即云端自动构建发布(`.github/workflows/release.yml`)——
-  `git tag v2.33.1 && git push origin v2.33.1`,GitHub Actions 会编译两个 exe、生成
+  `git tag v2.34.0 && git push origin v2.34.0`,GitHub Actions 会编译两个 exe、生成
   `checksums.txt`、打包(启动器 + 控制台工具 + 词典 + README)并生成中文 Release 说明;
   Release 资产名必须使用 ASCII:独立维护工具上传为 `Antigravity-CN-Settings.exe`,
   压缩包内仍保留 `设置与维护.exe`。不要把中文文件名传给 `gh release upload`

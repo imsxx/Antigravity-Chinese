@@ -8,9 +8,9 @@
 
 ## 当前支持
 
-- **工具版本**:`v2.33.1`
-- **已验证客户端**:Antigravity `2.32.1`
-- **覆盖规模**:`1504` 条翻译规则,`2042` 处实际替换(全部命中)
+- **工具版本**:`v2.34.0`
+- **已验证客户端**:Antigravity `2.34.0`
+- **覆盖规模**:`1588` 条翻译规则,`2151` 处实际替换(全部命中)
 - **平台**:Windows 10 / 11 当前用户,无需管理员权限
 - **零第三方依赖**:Go 标准库原生程序,无需 Python、Node.js 或任何运行时
 
@@ -167,8 +167,8 @@ Antigravity-Chinese/
 
 ```powershell
 go test ./...
-go build -trimpath -ldflags "-s -w -X main.toolVersion=v2.33.1" -o '设置与维护.exe' .
-go build -trimpath -tags launcher -ldflags "-s -w -X main.toolVersion=v2.33.1" -o antigravity-cn.exe .
+go build -trimpath -ldflags "-s -w -X main.toolVersion=v2.34.0" -o '设置与维护.exe' .
+go build -trimpath -tags launcher -ldflags "-s -w -X main.toolVersion=v2.34.0" -o antigravity-cn.exe .
 ```
 
 发布流水线会在推送 `v*` tag 时自动执行:
